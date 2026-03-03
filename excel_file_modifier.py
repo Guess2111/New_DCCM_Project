@@ -1,5 +1,4 @@
 import os
-from textwrap import wrap
 import pandas as pd
 from typing import List, Optional
 import openpyxl
@@ -193,7 +192,8 @@ class ExcelReader:
         self.workbook_path = workbook_path
         self.workbook_load = None
         self.sheets = None
-
+        
+    @property
     def get_sheets(self) -> List[str]|None:
         if os.path.exists(self.workbook_path):
             self.workbook_load = load_workbook(self.workbook_path, read_only=False)

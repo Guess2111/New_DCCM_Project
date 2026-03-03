@@ -1,9 +1,14 @@
 import os
+import pprint
+import traceback
 from queue import Queue
+from turtle import width
+import openpyxl
 from excel_file_modifier import ExcelReader, ExcelSheetModifier
 import pandas as pd
 from messages import Messagebox
 from collections import defaultdict
+from threading import Event
 from concurrent.futures import ThreadPoolExecutor
 
 class Excel_Reader_and_Template_Maker:
@@ -17,12 +22,14 @@ class Excel_Reader_and_Template_Maker:
                 self.sheets = None
                 self.main_sections = None
                 self.excel_reader_object = None
+                self.workbook_loaded = None
                 self.excel_modifier_dict = {}
                 self.queue = Queue()
                 
                 if self.sheets is None:
                     if self.excel_reader_object is None:
                         self.excel_reader_object = ExcelReader(self.file_path)
+                        
                 
                 self.sheets = self.excel_reader_object.get_sheets
                 
@@ -39,14 +46,15 @@ class Excel_Reader_and_Template_Maker:
         
         except Exception as e:
             messagebox = Messagebox()
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("Error", f"{traceback.format_exc()}\n{e}")
             
-    def section_data_parser(self, sheet_name: str, section_name: str, start_row: int, end_row: int, max_sheet_column: int, main_start_column: int, ws: Worksheet):
+    def section_data_parser(self, sheet_name: str, section_name: str, start_row: int, end_row: int, max_sheet_column: int, main_start_column: int, ws: openpyxl.worksheet.worksheet.Worksheet):
+        stop_event = Event()
         section_data = defaultdict(list)
         
         max_column_section = 1
         
-        i = main_start_column
+        i = main_start_column + 1
         while i <= max_sheet_column:
             if ws.cell(row=start_row, column=i).value is not None:
                 max_column_section = i
@@ -62,19 +70,32 @@ class Excel_Reader_and_Template_Maker:
         
         i = start_row + 1
         while i < end_row:
-            j = 1
-            while j <= len(columns):
-                column_name = columns[j-1]
-                section_data[column_name].append(ws.cell(row=i, column=j).value)
+            if all(
+                map(
+                            lambda x: ws.cell(row=i, column=x).value is None,
+                            range(main_start_column+1, len(columns)+1)
+                        )
+            ):
+                i += 1
+            else:
+                j = 0
+                while j < len(columns):
+                    column_name = columns[j]
+                    section_data[column_name].append(ws.cell(row=i, column=j+main_start_column+1).value)
+                    j += 1
             i += 1
         
-        dataframe = pd.dataFrame(section_data)
+        dataframe = pd.DataFrame(section_data)
         result = (sheet_name, section_name, dataframe)
         
         self.queue.put(result)
+
+        if not stop_event.is_set():
+            stop_event.set()
     
     
     def excel_parser(self, sheet_name: str, excel_modifier_object: ExcelSheetModifier):
+        stop_event = Event()
         try:
             __modifier_object = excel_modifier_object
             __sheet = __modifier_object.sheet
@@ -123,8 +144,7 @@ class Excel_Reader_and_Template_Maker:
             #     self.section_data_parser(selected_section, selected_section_start_row, selected_section_end_row, max_column, main_start_column, __sheet)
             #     i += 1
             with ThreadPoolExecutor(max_workers=4) as executor:
-                for i in range(len(_sections)):
-                    executor.submit(
+                    futures = [executor.submit(
                         self.section_data_parser,
                         sheet_name,
                         _sections[i],
@@ -134,33 +154,47 @@ class Excel_Reader_and_Template_Maker:
                         main_start_column,
                         __sheet
                     )
+                    for i in range(len(_sections))]
                     
-                executor.shutdown(wait=True)
+                    for furture in futures:
+                        furture.result()
         
         except Exception as e:
             messagebox = Messagebox()
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("Error", f"{traceback.format_exc()}\n{e}")
+    
+        if not stop_event.is_set():
+            stop_event.set()
     
             
             
     def file_parser(self):
         try:
+            self.workbook_loaded = self.excel_reader_object.get_openpyxl_workbook()
             if self.sheets:
                 i = 0
                 while i < len(self.sheets):
                     sheet_name = self.sheets[i]
-                    excel_file_modifier = ExcelSheetModifier(self.workbook_load[sheet_name])       
+                    # print(sheet_name)
+                    excel_file_modifier = ExcelSheetModifier(self.workbook_loaded[sheet_name])       
                     self.excel_modifier_dict[sheet_name] = excel_file_modifier
                     i += 1
                     
                 with ThreadPoolExecutor(max_workers=4) as executor:
-                    for sheet_name, excel_file_modifier in self.excel_modifier_dict.items():
-                        executor.submit(self.excel_parser, excel_file_modifier)
+                    futures = [
+                        executor.submit(self.excel_parser, sheet_name, excel_file_modifier)
+                        for sheet_name, excel_file_modifier in self.excel_modifier_dict.items()
+                    ]
                     
-                    executor.shutdown(wait=True)
+                    for future in futures:
+                        future.result()
             
             while not self.queue.empty():
                 sheet_name, section_name, dataframe = self.queue.get()
+                
+                if self.dict is None:
+                    self.dict = {}
+                
                 if sheet_name not in self.dict:
                     self.dict[sheet_name] = {}
                 
@@ -168,12 +202,23 @@ class Excel_Reader_and_Template_Maker:
                         
         except Exception as e:
             messagebox = Messagebox()
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("Error", f"{traceback.format_exc()}\n{e}")
         
     
     @property
     def get_dict(self):
         return self.dict if self.dict is not None else None
+    
+    def writer(self):
+        try:
+            string_ = f"{'\n\n'.join(f'{sheet_name}:\n\t{section_name}:\n{dataframe.to_markdown()}' for sheet_name, dict_ in self.dict.items() for section_name, dataframe in dict_.items())}"
+            with open("test_text.txt", "w+") as f:
+                f.write(string_)
+                f.close()
+                del f
+        except Exception as e:
+            messagebox = Messagebox()
+            messagebox.showerror("Error", f"{traceback.format_exc()}\n{e}")
     
     def quit(self):
         if self.excel_modifier_list:
