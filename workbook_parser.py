@@ -1,6 +1,7 @@
 import os
 import traceback
 import polars as pl
+import polars.selectors as cs
 from queue import Queue
 from pprint import pprint
 from messages import Messagebox
@@ -46,41 +47,100 @@ class Excel_Reader_and_Template_Maker:
                     )
                 ).to_series()
                 
+                # print(f"\n\n{sheet_name = }, {null_mask = }\n\n")
+                # print(f"\n\n{sheet_name = }, {main_df[7, :] = }\n\n")
+                # print(f"\n\n{sheet_name = }, {main_df[8, :] = }\n\n")
+                # print(f"\n\n{sheet_name = }, {main_df[9, :] = }\n\n")
+                
                 data_indices = [i for i, is_null in enumerate(null_mask) if not is_null]
                 
-                # 3. Group contiguous indices into blocks (sections)
-                sections_indices = []
-                current_section = [data_indices[0]]
+                data_indices.append(main_df.shape[0]+1)
+                # print(f"\n\n{sheet_name = }\n{data_indices = }\n\n")
                 
-                for i in range(1, len(data_indices)):
-                    if data_indices[i] == data_indices[i-1] + 1:
-                        current_section.append(data_indices[i])
+                sectional_block_tuple_list = []
+                i = 0
+                while i+1 < len(data_indices):
+                    temp_tuple = ()
+                    if len(sectional_block_tuple_list) == 0:
+                        temp_tuple = (0, data_indices[i])
+
+                    elif i+1 < len(data_indices) and  data_indices[i]+1 == data_indices[i+1]:
+                            i += 1
+                    
                     else:
-                        sections_indices.append(current_section)
-                        current_section = [data_indices[i]]
-                sections_indices.append(current_section)
-
-                 # 4. Create the dictionary mapping Section Name -> Section DataFrame
-                sectional_dict = {}
-
-                for indices in sections_indices:
-                    block_df = main_df.slice(indices[0], len(indices))
+                        temp_tuple = (data_indices[i], data_indices[i+1])
+                        i += 1
                     
-                    # Get the section name from the first non-null element of the first row
-                    first_row = block_df.row(0)
-                    section_name = next((str(val) for val in first_row if val is not None), None)
+                    if temp_tuple:
+                        sectional_block_tuple_list.append(temp_tuple)
+                
+                main_df_columns = main_df.columns
+                # print(f"\n\n{sheet_name = }\n\n{main_df_columns = }")
+                # print(f"\n\n{sheet_name = }\n{sectional_block_tuple_list = }\n\n")
+                sectional_dict = {}    
+                i = 0
+                while i < len(sectional_block_tuple_list):
+                    first_row, last_row = sectional_block_tuple_list[i]
+                    start_row = 0
+                    # print(f"\n\n{sheet_name = }\n{i = }\n{first_row = }\n{last_row = }\n")
+                    temp_df = pl.DataFrame()
+                    section_name = ""
+                    exclude_columns = [0]
+                    first_row_for_column = ()
                     
-                    if section_name:
-                        data_content = block_df.slice(1)
+                    if len(sectional_dict) == 0:
+                        # print(f"{sheet_name = }, {first_row = }")
+                        columns = main_df.columns
+                        first_row_for_column = main_df.columns
+                        start_row = first_row
+                        columns = columns[1:]
                         
-                        # Cleaning step: Remove columns that are entirely null in this specific section
-                        data_content = data_content.select([
-                            col for col in data_content.get_columns() 
-                            if not col.is_null().all()
-                        ])
+                    
+                    else:
+                        # print(f"\n\n{sheet_name = },\n{first_row = }\n{[str(value).strip() for _, value in main_df.row(first_row, named =True).items() if value is not None] = }\n\n")
+                        first_row_for_column = [str(value).strip() for _, value in main_df.row(first_row, named =True).items() if value is not None]
+                        # print(f"{sheet_name = }, {first_row_for_column = }")
+                        start_row = first_row + 1
                         
-                        sectional_dict[section_name] = data_content
-                        
+                    
+                    columns = [element for element in first_row_for_column if element is not None or element != ""]
+                    # print(f"{sheet_name = }\n{i = }\n{columns = }")
+                    starting_column_index_to_remove = len(columns)
+                    ending_column_index_to_remove = len(main_df_columns)
+                    exclude_columns.extend(
+                        [i for i in range(starting_column_index_to_remove, ending_column_index_to_remove)]
+                    )
+                    
+                    section_name = str(columns[0]).strip()
+                    # columns = [str(columns[i].value).strip() for i in range(1, len(columns))]
+                    # print(f"{sheet_name=}\n{columns=}")
+                    temp_df = main_df[start_row:last_row, :]
+                    # print(f"\n\n{sheet_name = }\n{i = }\n{temp_df}\n")                    
+                    
+                    if len(exclude_columns) > 0:
+                        # print(f"\n\n{sheet_name = }\n{i = }\n{exclude_columns}\n")
+                        # print(f"\n\n{sheet_name = }\n{i = }\n{cs.by_index(
+                        #             list(set(exclude_columns))
+                        #         ) = }\n")
+                        temp_df = temp_df.select(~cs.by_index(
+                                    list(set(exclude_columns))
+                                ))
+                        # print(f"\n\n{sheet_name = }\n{i = }\n{temp_df}\n")
+                    # print(f"\n\n{sheet_name = }\n{i = }\n{columns=}")
+                    temp_df = temp_df.rename(
+                        dict(
+                            zip(
+                                [element for element in temp_df.columns],
+                                columns[1:]
+                            )
+                        )
+                    )
+                    # print(f"\n\n{sheet_name = }\n{i = }\n{temp_df}\n")
+                    
+                    sectional_dict[section_name] = temp_df
+                    
+                    i += 1        
+                # print(f"\n\n{sheet_name = }\n {sectional_dict}")
                 self.queue.put((sheet_name, sectional_dict))
                 
         except Exception as e:
@@ -111,9 +171,10 @@ class Excel_Reader_and_Template_Maker:
                     
                     for future in futures:
                         future.result()
-            
+            print("Queue size:", self.queue.qsize())
             if self.queue.qsize() > 0:
                 while self.queue.qsize() > 0:
+                    print(self.queue.qsize())
                     sheet_name, sectional_dict = self.queue.get()
                     self.dict[sheet_name] = sectional_dict
                     
