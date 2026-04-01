@@ -5,8 +5,10 @@ import polars.selectors as cs
 from queue import Queue
 from pprint import pprint
 from messages import Messagebox
+from tabulate import tabulate
 from threading import Event
 from concurrent.futures import ThreadPoolExecutor
+
 
 
 class Excel_Reader_and_Template_Maker:
@@ -55,7 +57,7 @@ class Excel_Reader_and_Template_Maker:
                 data_indices = [i for i, is_null in enumerate(null_mask) if not is_null]
                 
                 data_indices.append(main_df.shape[0]+1)
-                # print(f"\n\n{sheet_name = }\n{data_indices = }\n\n")
+                # print(f"\n\n{sheet_name = }\n{data_indices = }\n\n") 
                 
                 sectional_block_tuple_list = []
                 i = 0
@@ -171,7 +173,7 @@ class Excel_Reader_and_Template_Maker:
                     
                     for future in futures:
                         future.result()
-            print("Queue size:", self.queue.qsize())
+            # print("Queue size:", self.queue.qsize())
             if self.queue.qsize() > 0:
                 while self.queue.qsize() > 0:
                     print(self.queue.qsize())
@@ -179,6 +181,27 @@ class Excel_Reader_and_Template_Maker:
                     self.dict[sheet_name] = sectional_dict
                     
         
+        except Exception as e:
+            messagebox = Messagebox()
+            messagebox.showerror("Error", f"{traceback.format_exc()}\n{e}")
+    
+    
+    def markdown_maker(self, df: pl.DataFrame):
+        try:
+            markdown_table = tabulate(df.to_dicts(), headers="keys", tablefmt="github")
+            return markdown_table
+            
+        except Exception as e:
+            messagebox = Messagebox()
+            messagebox.showerror("Error", f"{traceback.format_exc()}\n{e}")
+    
+    def writer(self):
+        try:
+            string_ = f"{'\n\n'.join(f'{sheet_name}:\n\t{section_name}:\n{self.markdown_maker(dataframe)}' for sheet_name, dict_ in self.dict.items() for section_name, dataframe in dict_.items())}"
+            with open("test_text.txt", "w+") as f:
+                f.write(string_)
+                f.close()
+                del f
         except Exception as e:
             messagebox = Messagebox()
             messagebox.showerror("Error", f"{traceback.format_exc()}\n{e}")

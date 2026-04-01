@@ -1,11 +1,14 @@
 import os
 import pandas as pd
+import polars as pl
 from typing import List, Optional
 import openpyxl
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from messages import Messagebox
+from typing import Dict
+import sections_writer as sw
 
 
 class ExcelModifier:
@@ -237,6 +240,8 @@ class ExcelSheetModifier:
     
     
     def first_row_finder_for_header(self):
+        header_row = 1
+        header_column = 1
         i = 1
         j = 1
         breaker = False
@@ -251,6 +256,7 @@ class ExcelSheetModifier:
             if breaker:
                 break
             i += 1
+            
         return header_row, header_column
 
     def column_width_adjuster(self):
@@ -346,3 +352,206 @@ class ExcelSheetModifier:
 
         self.column_width_adjuster()
         # self.save()
+
+class Excel_Writer_and_modifier:
+    def __init__(self, host_details: str, workbook_path: str) -> None:
+        self.host_details = host_details
+        self.workbook_path = workbook_path
+        
+        if not os.path.exists(self.workbook_path):
+            self.workbook = Workbook()
+        else:
+            self.workbook = load_workbook(self.workbook_path)
+        self.header_row_index = 1
+        self.max_rows = 0
+        self.max_cols = 0
+        
+        self.side = Side(style="medium", color="000000")
+        self.border = Border(
+            left=self.side, right=self.side, top=self.side, bottom=self.side
+        )
+        self.fill = None
+        self.alignment = Alignment(
+            horizontal="center", vertical="center", wrap_text=True
+        )
+        self.header_font = Font(
+            name="Ericsson Hilda", bold=True, size=14, color="FFFFFF"
+        )
+        self.normal_font = Font(name="Ericsson Hilda", size=11)
+        self.wrap_text = True
+        self.fill = PatternFill(
+            start_color="3333FF", end_color="3333FF", fill_type="solid"
+        )
+        
+        self.acceptible_sections = ["prefix"]
+        # self.section_column_mapping = {
+        #     "prefix" : {
+        #         "prefix_set_name*":	"Prefix-list Name",
+        #         "ip_subnet": "Prefix-IP",	
+        #         "expression_ge": "",	
+        #         "expression_le": "", 	
+        #         "expression_eq": "",	
+        #         "Operation": "Action"
+        #     }
+        # }
+        # self.section_required_columns = {
+        #     "prefix": ["Action","Sequence Action","Version","Prefix-list Name","Sequence Number","Permit/Deny","Prefix-IP","Length","Route Policy Mapping","Access-list Protocol","Access-list Source IP","Access-list source Wild Mask","Access-list Destination IP","Access-list destination Wild Mask"]
+        # }
+        self.acceptible_sections_class_object_creater = {
+            "prefix" : sw.Prefix_section
+        }
+        
+            
+    def get_worksheet(self, sheet_name: str) -> openpyxl.worksheet.worksheet.Worksheet:
+        return self.workbook[sheet_name]
+    
+    def add_sheets(self, sheet_names: List[str]) -> None:
+        for sheet_name in sheet_names:
+            if sheet_name not in self.workbook.sheetnames:
+                self.workbook.create_sheet(sheet_name)
+        
+        self.extra_sheet_remover(sheet_names)
+        
+    def styler(self, worksheet: openpyxl.worksheet.worksheet.Worksheet):
+        max_cols = worksheet.max_column
+        max_rows = worksheet.max_row
+        col_width = []
+        
+        i = 1
+        while i <= max_rows:
+            j = 1
+            while j <= max_cols:
+                if len(col_width) < max_cols:
+                    col_width.append(len(str(worksheet.cell(i, j).value)) + 3)
+                else:
+                    col_width[j-1] = max(col_width[j-1], len(str(worksheet.cell(i, j).value))) + 3
+                j += 1
+            i += 1
+        
+        for i in range(1, max_cols + 1):
+            worksheet.column_dimensions[get_column_letter(i)].width = col_width[i-1]
+            
+        i = 1
+        while i <= max_cols:
+            worksheet.cell(1,i).fill = self.fill
+            worksheet.cell(1,i).alignment = self.alignment
+            worksheet.cell(1,i).font = self.header_font
+            worksheet.cell(1,i).border = self.border
+            i += 1
+        
+        i = 2
+        while i <= max_rows:
+            j = 1
+            while j <= max_cols:
+                worksheet.cell(i,j).border = self.border
+                worksheet.cell(i,j).alignment = self.alignment
+                worksheet.cell(i,j).font = self.normal_font
+                j += 1
+            i += 1
+        
+    
+    def sheet_handler(self, dict_data: Dict[str, pl.DataFrame|pd.DataFrame]) -> None:        
+        sections = list(dict_data.keys())
+        sheets_in_workbook = ["HostDetails"]
+        i = 0
+        while i < len(sections):
+            selected_section = sections[i]
+            selected_section_data = dict_data[selected_section]
+            
+            # start_row = 0
+            dest_section_name = next((x for x in self.acceptible_sections if x in str(selected_section).lower()), None)
+            if dest_section_name:
+                sheets_in_workbook.append(dest_section_name)
+                if dest_section_name not in self.workbook.sheetnames:
+                    self.workbook.create_sheet(dest_section_name)
+                worksheet = self.workbook[dest_section_name]
+                
+                # max_row = worksheet.max_row
+                # max_col = worksheet.max_column
+                # columns = []
+                
+                # # Handle the section data
+                # if isinstance(selected_section_data, pl.DataFrame):
+                #     # Handle polars DataFrame
+                #     columns = selected_section_data.columns
+                
+                # elif isinstance(selected_section_data, pd.DataFrame):
+                #     # Handle pandas DataFrame
+                #     columns = selected_section_data.columns.tolist()
+                
+                # if max_row in [0, 1, None]:
+                #     start_row = 1
+                # else:
+                #     start_row = max_row + 2    
+                # # worksheet.cell(row=start_row, column=1, value=selected_section)
+                # # start_row += 1
+                
+                # # Add columns
+                # required_columns = self.section_required_columns.get(dest_section_name, [])
+                # # print(f"{required_columns = }\n")
+                
+                # col_dict = {col: idx for idx, col in enumerate(required_columns, 1)}
+                # # print(f"{col_dict = }")
+                # for column, col_idx in col_dict.items():
+                #     worksheet.cell(row=start_row, column=col_idx, value=column)
+                # start_row += 1
+                # # print(f"{type(selected_section_data) = }")
+                # # Add data
+                # # if isinstance(selected_section_data, pl.DataFrame):
+                # #     # Handle polars DataFrame
+                # #     # for row_idx, row in enumerate(selected_section_data.iter_rows(), start=start_row):
+                # #     #     for col_idx, value in enumerate(row, start=1):
+                # #     #         worksheet.cell(row=row_idx, column=col_idx, value=value)
+                    
+                # #     selected_section_data.to_dict()
+                
+                # # elif isinstance(selected_section_data, pd.DataFrame):
+                # #     # Handle pandas DataFrame
+                # #     for row_idx, row in enumerate(selected_section_data.iterrows(), start=start_row):
+                # #         for col_idx, value in enumerate(row[1], start=1):
+                # #             worksheet.cell(row=row_idx, column=col_idx, value=value)
+                
+                # dict_ = selected_section_data.to_dict()
+                # section_column_mapping = self.section_column_mapping[(dest_section_name).lower()]
+                # # print(f"{section_column_mapping = }\n\n")
+                # for key, value in dict_.items():
+                #     col_id = col_dict.get(
+                #         section_column_mapping.get(key, key), 1
+                #     )
+                #     for row_id in range(start_row, start_row + len(value) + 1):
+                #         worksheet.cell(row=row_id, column=col_id, value=value[row_id - start_row - 1])
+                
+                self.acceptible_sections_class_object_creater[dest_section_name]().section_writer(worksheet, selected_section_data)
+                self.styler(worksheet) 
+            i += 1
+        
+        self.extra_sheet_remover(sheets_in_workbook)
+        
+    
+    def add_data_from_dataframe_dict(self, data_dict: Dict[str, pl.DataFrame|pd.DataFrame]) -> None:
+        # sheets = list(data_dict.keys())
+        # self.add_sheets(sheets)
+        # print(f"{data_dict.items() = }")0
+        self.add_host_details_sheet()
+        self.sheet_handler(data_dict)
+    
+    def add_host_details_sheet(self):
+        if "HostDetails" not in self.workbook.sheetnames:
+            self.workbook.create_sheet("HostDetails")
+            host_details_sheet = self.workbook["HostDetails"]
+            
+            columns = ["Host Name","Host IP","CR ID","Vendor"]
+            for i in range(len(columns)):
+                host_details_sheet.cell(row=1, column=i+1, value=columns[i])
+            host_details_sheet.cell(row=2, column=1, value=self.host_details)
+            
+    
+    def quit(self)-> None:
+        self.workbook.save(self.workbook_path)
+        del self.workbook
+    
+    def extra_sheet_remover(self, sheet_names: List[str]) -> None:
+        for sheet_name in self.workbook.sheetnames:
+            if sheet_name not in sheet_names:
+                self.workbook.remove(self.workbook[sheet_name])
+                
