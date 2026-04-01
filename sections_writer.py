@@ -17,17 +17,12 @@ class SectionsWriter:
         pass
     
     
-    
 
 class Prefix_section:
     def __init__(self) -> None:        
         self.section_column_mapping = {
                 "prefix_set_name*":	"Prefix-list Name",
-                "ip_subnet": "Prefix-IP",	
-                # "expression_ge": "",	
-                # "expression_le": "", 	
-                # "expression_eq": "",	
-                # "Operation": "Action"
+                "ip_subnet": "Prefix-IP"
         }
         
         self.section_required_columns = [
@@ -82,121 +77,29 @@ class Prefix_section:
                 )
             )
         ).alias("Length")
-        # __processed_df = df.with_columns(
-        #     nw.when(
-        #         (
-        #             ~nw.col(
-        #                 'expression_eq'
-        #             ).is_null()
-        #         )
-        #         &
-        #         (
-        #             (
-        #                 ~nw.col(
-        #                     'expression_le'
-        #                 ).is_null()
-        #             ) 
-        #         |
-        #             (
-        #                 ~nw.col(
-        #                     'expression_ge'
-        #                 ).is_null()
-        #             )
-        #         )
-        #     ).then(
-        #         nw.lit(
-        #             "ERROR: Conflict between eq and ge/le"
-        #         )
-        #     )
-        #     .when(
-        #         (
-        #             ~nw.col(
-        #                 'expression_ge'
-        #             ).is_null()
-        #         )
-        #     ).then(
-        #         nw.lit("eq ") + nw.col(
-        #             'expression_eq'
-        #         ).cast(nw.String)
-        #     )
-        #     .when(
-        #         (
-        #             (
-        #                 ~nw.col(
-        #                     'expression_le'
-        #                 ).is_null()
-        #             )
-        #             &
-        #             (
-        #                 ~nw.col(
-        #                     'expression_ge'
-        #                 ).is_null()
-        #             ) 
-        #         )
-        #     ).then(
-        #         nw.lit("ge ") + nw.col(
-        #             'expression_ge'
-        #             ).cast(nw.String) + nw.lit(" le ") + nw.col(
-        #             'expression_le')
-        #     )
-        #     .when(
-        #         (
-        #             ~nw.col(
-        #                 'expression_ge'
-        #             ).is_null()    
-        #         )          
-        #     ).then(
-        #         nw.lit("ge ") + nw.col(
-        #             'expression_ge'
-        #         ).cast(nw.String)
-        #     )
-        #     .when(
-        #         (
-        #             ~nw.col(
-        #                 'expression_le'
-        #             ).is_null()
-        #         )
-        #     ).then(
-        #         nw.lit("le ") + nw.col(
-        #             'expression_le'
-        #         ).cast(nw.String)
-        #     )
-        #     .otherwise(
-        #         nw.lit("")
-        #     )
-        # ).alias("Formatted_length_output")
+        
         __processed_df = df.with_columns(formatted_expr)
         
-        # return __processed_df["Formatted_length_output"].to_list()
         return __processed_df
     
     
     def get_ip_version(self, ip_value: str) -> str:
-        # print(f"Processing IP value: {ip_value}")
-        # print(f"Instance IP value: {type(ip_value)}")
         if not isinstance(ip_value, str) or not ip_value.strip():
             return ""
         
         try:
             clean_ip = ip_value.strip().split('/')[0]
-            # print(f"Cleaned IP: {clean_ip}")
-            
+                        
             version = ipaddress.ip_address(clean_ip).version
-            # print(f"IP version: {version}")
-            return str(version)
+            return f"ipv{version}"
         
         except ValueError:
-            # print(f"Invalid IP address: {ip_value}")
             return ""
     
     
     @nw.narwhalify
     def get_the_version(self, df: IntoDataFrameT) -> IntoDataFrameT:
         col_name = 'ip_subnet'
-        
-        # result_df = df.with_columns(
-        #     nw.col(col_name).cast(nw.String).map_elements(self.get_ip_version, returns_scalar=True).alias("Version")
-        # )
         
         result_df = nw.to_native(df)
         
@@ -235,18 +138,11 @@ class Prefix_section:
             expr_b.alias("Sequence Action")
         )
         
-        # list_a = result_df["list_a_results"].to_list()
-        # list_b = result_df["list_b_results"].to_list()
-        
-        # return list_a, list_b, result_df
         return result_df
     
     
     def section_writer(self, worksheet: openpyxl.worksheet.worksheet.Worksheet, df: IntoDataFrameT):
         start_row = 1
-        
-        # if "prefix" not in workbook_object.sheetnames:
-        #     workbook_object.create_sheet("prefix")
         
         # worksheet = workbook_object["prefix"]
         max_row = worksheet.max_row
@@ -254,29 +150,7 @@ class Prefix_section:
         # worksheet_df = None
         
         if max_row != 1 and max_col != 1:
-            # data_generator = worksheet.values
-            # columns = next(data_generator)
-            # data_rows = list(data_generator)
-            
-            # if isinstance(df, pl.DataFrame):
-            #     worksheet_df = pl.DataFrame(data_rows, schema=list(columns), orient="row")
-                
-            # if isinstance(df, pd.DataFrame):
-            #     worksheet_df = pd.DataFrame(data_rows, columns)
-            # for row in worksheet.iter_rows():
-            #     for cell in row:
-            #         cell.value = None
-            #         cell.border = None
-            #         cell.alignment = None
-            #         cell.
             worksheet.delete_rows(1, max_row)
-                    
-                
-        # if max_row in [0, 1, None]:
-        #     start_row = 1
-        
-        # else:
-        #     start_row = max_row + 2
         
         max_row = worksheet.max_row
         max_col = worksheet.max_column
@@ -329,4 +203,10 @@ class Prefix_section:
                     
                     else:
                         worksheet.cell(row=row_id, column=col_id, value="")
+                        
+                        
+
+class Policy_section:
+    def __init__(self):
+        pass
             
