@@ -7,7 +7,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from messages import Messagebox
-from typing import Dict
+from typing import Dict, AnyStr
 import sections_writer as sw
 
 
@@ -383,7 +383,10 @@ class Excel_Writer_and_modifier:
             start_color="3333FF", end_color="3333FF", fill_type="solid"
         )
         
-        self.acceptible_sections = ["prefix"]
+        self.acceptible_sections = [
+            "Prefix set Configuration", 
+            "Route Policy Configuration"]
+        
         # self.section_column_mapping = {
         #     "prefix" : {
         #         "prefix_set_name*":	"Prefix-list Name",
@@ -398,7 +401,13 @@ class Excel_Writer_and_modifier:
         #     "prefix": ["Action","Sequence Action","Version","Prefix-list Name","Sequence Number","Permit/Deny","Prefix-IP","Length","Route Policy Mapping","Access-list Protocol","Access-list Source IP","Access-list source Wild Mask","Access-list Destination IP","Access-list destination Wild Mask"]
         # }
         self.acceptible_sections_class_object_creater = {
-            "prefix" : sw.Prefix_section
+            "Prefix set Configuration" : sw.Prefix_section,
+            "Route Policy Configuration" : sw.Policy_section
+        }
+        
+        self.sheet_name_mapping = {
+            "Route Policy Configuration": "policy",
+            "Prefix set Configuration": "prefix"
         }
         
             
@@ -450,7 +459,7 @@ class Excel_Writer_and_modifier:
             i += 1
         
     
-    def sheet_handler(self, dict_data: Dict[str, pl.DataFrame|pd.DataFrame]) -> None:        
+    def sheet_handler(self, dict_data: Dict[str, pl.DataFrame|pd.DataFrame], vendor_type: AnyStr|None) -> None:        
         sections = list(dict_data.keys())
         sheets_in_workbook = ["HostDetails"]
         i = 0
@@ -459,7 +468,8 @@ class Excel_Writer_and_modifier:
             selected_section_data = dict_data[selected_section]
             
             # start_row = 0
-            dest_section_name = next((x for x in self.acceptible_sections if x in str(selected_section).lower()), None)
+            # dest_section_name = next((x for x in self.acceptible_sections if x in str(selected_section).lower()), None)
+            dest_section_name = self.sheet_name_mapping.get(selected_section, None)
             if dest_section_name:
                 sheets_in_workbook.append(dest_section_name)
                 if dest_section_name not in self.workbook.sheetnames:
@@ -521,19 +531,19 @@ class Excel_Writer_and_modifier:
                 #     for row_id in range(start_row, start_row + len(value) + 1):
                 #         worksheet.cell(row=row_id, column=col_id, value=value[row_id - start_row - 1])
                 
-                self.acceptible_sections_class_object_creater[dest_section_name]().section_writer(worksheet, selected_section_data)
+                self.acceptible_sections_class_object_creater[selected_section]().section_writer(worksheet, selected_section_data, vendor_type)
                 self.styler(worksheet) 
             i += 1
         
         self.extra_sheet_remover(sheets_in_workbook)
         
     
-    def add_data_from_dataframe_dict(self, data_dict: Dict[str, pl.DataFrame|pd.DataFrame]) -> None:
+    def add_data_from_dataframe_dict(self, data_dict: Dict[str, pl.DataFrame|pd.DataFrame], vendor_type: AnyStr='xr') -> None:
         # sheets = list(data_dict.keys())
         # self.add_sheets(sheets)
         # print(f"{data_dict.items() = }")0
         self.add_host_details_sheet()
-        self.sheet_handler(data_dict)
+        self.sheet_handler(data_dict, vendor_type)
     
     def add_host_details_sheet(self):
         if "HostDetails" not in self.workbook.sheetnames:

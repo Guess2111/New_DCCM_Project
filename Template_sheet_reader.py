@@ -6,7 +6,6 @@ from turtle import width
 import openpyxl
 from excel_file_modifier import ExcelReader, ExcelSheetModifier
 import pandas as pd
-from messages import Messagebox
 from collections import defaultdict
 from threading import Event
 from concurrent.futures import ThreadPoolExecutor
@@ -41,12 +40,10 @@ class Excel_Reader_and_Template_Maker:
                 raise FileNotFoundError("File Not Found!")
         
         except FileNotFoundError:
-            messagebox = Messagebox()
-            messagebox.showerror("File Not Found", "File Not Found!")
+            print("Error: File Not Found!")
         
         except Exception as e:
-            messagebox = Messagebox()
-            messagebox.showerror("Error", f"{traceback.format_exc()}\n{e}")
+            print(f"Error: {traceback.format_exc()}\n{e}")
             
     def section_data_parser(self, sheet_name: str, section_name: str, start_row: int, end_row: int, max_sheet_column: int, main_start_column: int, ws: openpyxl.worksheet.worksheet.Worksheet):
         stop_event = Event()
@@ -160,8 +157,7 @@ class Excel_Reader_and_Template_Maker:
                         furture.result()
         
         except Exception as e:
-            messagebox = Messagebox()
-            messagebox.showerror("Error", f"{traceback.format_exc()}\n{e}")
+            print(f"Error: {traceback.format_exc()}\n{e}")
     
         if not stop_event.is_set():
             stop_event.set()
@@ -201,8 +197,7 @@ class Excel_Reader_and_Template_Maker:
                 self.dict[sheet_name][section_name] = dataframe
                         
         except Exception as e:
-            messagebox = Messagebox()
-            messagebox.showerror("Error", f"{traceback.format_exc()}\n{e}")
+            print(f"Error: {traceback.format_exc()}\n{e}")
         
     
     @property
@@ -217,8 +212,7 @@ class Excel_Reader_and_Template_Maker:
                 f.close()
                 del f
         except Exception as e:
-            messagebox = Messagebox()
-            messagebox.showerror("Error", f"{traceback.format_exc()}\n{e}")
+            print(f"Error: {traceback.format_exc()}\n{e}")
     
     def quit(self):
         if self.excel_modifier_list:

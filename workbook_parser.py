@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 class Excel_Reader_and_Template_Maker:
     def __init__(self, file_path: str):
+        self.excluded_sheets = ["Revision Sheet"]
         try:
             if os.path.exists(str(file_path)):
                 self.file_path = str(file_path)
@@ -39,24 +40,41 @@ class Excel_Reader_and_Template_Maker:
         stop_event = Event()
         try:
             if main_df.shape[0] > 0:
+                # null_mask = main_df.select(
+                #     ((
+                #         pl.all().is_null()
+                #     ) 
+                #     | 
+                #     (
+                #         pl.all().is_nan()
+                #     ))
+                #     |
+                #     (
+                #         pl.all().cast(pl.Utf8) == ""
+                #     )
+                # ).to_series()
+                
+                # null_mask = main_df.select(
+                #     pl.all_horizontal(
+                #         pl.all().is_null() | (pl.all().cast(pl.Utf8).str.strip_chars() == "")
+                #     ).alias("__is_empty__")
+                # ).to_series()
+                
                 null_mask = main_df.select(
-                    (
-                        pl.all().is_null()
-                    ) 
-                    | 
-                    (
-                        pl.all().cast(pl.Utf8) == ""
-                    )
+                        pl.all().is_null() | (pl.all().cast(pl.Utf8).str.strip_chars() == "")
                 ).to_series()
+
+                data_indices = [i for i, is_empty in enumerate(null_mask) if not is_empty]
+                data_indices.append(main_df.shape[0] + 1)
                 
                 # print(f"\n\n{sheet_name = }, {null_mask = }\n\n")
-                # print(f"\n\n{sheet_name = }, {main_df[7, :] = }\n\n")
-                # print(f"\n\n{sheet_name = }, {main_df[8, :] = }\n\n")
-                # print(f"\n\n{sheet_name = }, {main_df[9, :] = }\n\n")
+                # print(f"\n\n{sheet_name = }, {main_df[2, :] = }\n\n")
+                # print(f"\n\n{sheet_name = }, {main_df[3, :] = }\n\n")
+                # print(f"\n\n{sheet_name = }, {main_df[4, :] = }\n\n")
                 
-                data_indices = [i for i, is_null in enumerate(null_mask) if not is_null]
+                # data_indices = [i for i, is_null in enumerate(null_mask) if not is_null]
                 
-                data_indices.append(main_df.shape[0]+1)
+                # data_indices.append(main_df.shape[0]+1)
                 # print(f"\n\n{sheet_name = }\n{data_indices = }\n\n") 
                 
                 sectional_block_tuple_list = []
@@ -120,7 +138,7 @@ class Excel_Reader_and_Template_Maker:
                     # print(f"\n\n{sheet_name = }\n{i = }\n{temp_df}\n")                    
                     
                     if len(exclude_columns) > 0:
-                        # print(f"\n\n{sheet_name = }\n{i = }\n{exclude_columns}\n")
+                        # print(f"\n\n{sheet_name = }\n{i = }\n{exclude_columns =}\n")
                         # print(f"\n\n{sheet_name = }\n{i = }\n{cs.by_index(
                         #             list(set(exclude_columns))
                         #         ) = }\n")
@@ -161,22 +179,24 @@ class Excel_Reader_and_Template_Maker:
             #     "\n\n".join(f'{sheet}:\n{df}' for sheet, df in self.workbook.items())
             # )
             if self.sheets:
-                with ThreadPoolExecutor(max_workers=4) as executor:
-                    futures = [
-                        executor.submit(
-                            self.sheet_parser,
-                            self.sheets[i],
-                            self.workbook[self.sheets[i]]
-                        )
-                        for i in range(len(self.sheets))
-                    ]
-                    
-                    for future in futures:
-                        future.result()
+                self.sheets = [sheet for sheet in self.sheets if sheet not in self.excluded_sheets]
+                if self.sheets:
+                    with ThreadPoolExecutor(max_workers=4) as executor:
+                        futures = [
+                            executor.submit(
+                                self.sheet_parser,
+                                self.sheets[i],
+                                self.workbook[self.sheets[i]]
+                            )
+                            for i in range(len(self.sheets))
+                        ]
+                        
+                        for future in futures:
+                            future.result()
             # print("Queue size:", self.queue.qsize())
             if self.queue.qsize() > 0:
                 while self.queue.qsize() > 0:
-                    print(self.queue.qsize())
+                    # print(self.queue.qsize())
                     sheet_name, sectional_dict = self.queue.get()
                     self.dict[sheet_name] = sectional_dict
                     
